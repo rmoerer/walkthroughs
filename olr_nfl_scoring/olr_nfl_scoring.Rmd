@@ -1,0 +1,167 @@
+---
+title: "Deriving scoring margin distribution from moneyline"
+author: "Ryan Moerer\n"
+date: '`r Sys.Date()`'
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## The Problem at Hand
+
+The distribution of scoring margins in the NFL is quite wonky. While somewhat symmetrical around the spread, the distribution is certainly not smooth due to the key numbers (like 3, 7, etc.) that pop up much more often than many of the common probability distributions would imply. Therefore,
+
+## The Data
+
+We will be focusing on the NFL specifically and more specifically we will be focusing on games/point spreads from 2006 onward.
+
+```{r}
+library(bettools) # personal package for some basic betting functions
+library(tidyverse)
+
+# load NFL schedules and only include games where there is a moneyline
+data <- nflreadr::load_schedules()
+data <- data %>% filter(!is.na(home_moneyline) & !is.na(result))
+# create analysis dataframe
+data <- rbind(
+  data %>%
+    select(game_id,
+           team = home_team, 
+           opp = away_team,
+           team_spread = spread_line,
+           team_spread_odds = home_spread_odds,
+           opp_spread_odds = away_spread_odds,
+           team_moneyline = home_moneyline,
+           opp_moneyline = away_moneyline,
+           result) %>%
+    mutate(team_spread = -team_spread),
+  data %>%
+    select(game_id,
+           team = away_team, 
+           opp = home_team,
+           team_spread = spread_line,
+           team_spread_odds = away_spread_odds,
+           opp_spread_odds = home_spread_odds,
+           team_moneyline = away_moneyline,
+           opp_moneyline = home_moneyline,
+           result) %>%
+    mutate(team_spread = team_spread,
+           result = -result)
+)
+```
+
+## A quick look at some data
+
+In taking a quick look at the scoring margins for spreads between -2.5 and -3.5 we can see the problem previously described. Certain numbers show up much more often than others.
+
+```{r}
+data %>%
+  filter(between(team_spread, -3.5, -2.5)) %>%
+  ggplot(aes(x = result)) +
+  geom_bar()
+```
+
+## Ordinal Logistic Regression
+
+Since we cannot use a smooth distribution we need some other approach. The approach I will be exploring is taken from this [article](https://www.inpredictable.com/2012/11/nfl-scoring-margin-distributions.html). Essentially we will be using an ordered logistic regression to come up with estimates for the scoring margin distribution. Rather than using the spread in the regression, I will instead be converting the moneyline to log odds and then use that as an offset in the model. I'm doing this for two reasons primarily: 1) The moneyline is a continous value and probably exists on a much smoother continuum than the spread 2) Many NFL prediction models output a probability rather than a spread, so it would be beneficial to have some sort of methodology for converting that probability to a point spread.
+
+```{r}
+data <- data %>%
+  mutate(
+    # prob of team winning implied from ml
+    team_prob = remove_vig(team_moneyline, opp_moneyline),
+    # convert implied prob to logit
+    team_logit = logit(team_prob),
+    # convert scoring margin to factor since that is what MASS::polr 
+    # takes as a response
+    result_fact = factor(pmin(28, pmax(-28, result)))
+  )
+```
+
+
+```{r}
+# fit model
+model <- MASS::polr(
+  result_fact ~ offset(team_logit),
+  data = data,
+  Hess = T
+)
+
+# summarize model
+summary(model)
+
+# plot estimated distribution for an even moneyline
+# (for whatever reason predict does not allow for offsets for a polr object 
+# despite being able to fit the model with one)
+barplot(predict(model, newdata = data.frame(team_logit = 0), type="probs"))
+```
+
+Lines up relatively well with what we saw from what we might assume. We can certainly see the key numbers (3, 7, 10, etc.) having much more prominence than
+
+## Some useful applications
+
+### Get scoring margin distribution from moneyline
+
+First and foremost it would be beneficial to compute the scoring margin distribution from the moneyline for a game. For some odd reason, `polr` seems to be able to fit a model with an offset, but `predict.polr` does not consider offsets. Thus, we need to create the function manually.
+
+```{r}
+probs_from_moneyline <- function(model, moneyline, type="us") {
+  implied_logit <- logit(implied_prob(moneyline, type))
+  zeta <- model$zeta
+  cum_logits <- zeta - implied_logit
+  cum_probs <- invlogit(cum_logits)
+  probs <- c(
+    cum_probs[1],
+    diff(cum_probs),
+    1 - cum_probs[length(cum_probs)]
+  )
+  names(probs) <- -28:28
+  probs
+}
+
+barplot(probs_from_moneyline(model, 100))
+```
+
+### Compute spread from moneyline
+
+Now that we have the scoring margin probabilities, we can compute the spread from the moneyline.
+
+```{r}
+# TODO: Might want to come up with a more vectorized approach
+compute_spread <- function(model, moneyline, type="us") {
+  # possible point values
+  vals <- -28:28
+  probs <- probs_from_moneyline(model, moneyline, type="us")
+  names(probs) <- vals
+  spreads <- seq(-27.5, 27.5, 0.5)
+  spread_probs <- numeric(length(spreads))
+  for (i in 1:length(spreads)) {
+    # if spread is a whole number we need to compute prob of covering
+    # conditional on not landing on said number (since that would be a push)
+    if (spreads[i] %% 1 == 0) {
+      spread_probs[i] <-
+        sum(probs[which(vals < spreads[i])]) / (1 - probs[which(vals == spreads[i])])
+    } else {
+      spread_probs[i] <- sum(probs[which(vals < spreads[i])])
+    }
+  }
+  spread_ind <- which.min(abs(spread_probs - 0.5))
+  # return list of spread and spread prob
+  list(
+    spread = -spreads[spread_ind],
+    prob = 1 - spread_probs[spread_ind]
+  )
+}
+
+compute_spread(model, -210)
+```
+
+## Limitations and things to improve on
+
+This was ultimately a simple attempt to get more comfortable with an ordered logistic regression in an applied setting and while we seemed to get results that made sense, there are certainly quite a few limitations/things to improve on.
+  
+  * A major change was made in extra points scoring in recent years so older seasons might not be representative of current scoring margin distributions.
+  * Other factors, such as the point total for a game or team variance could impact the spread of the scoring margin distribution.
+  * The assumptions needed for an ordered logistic regression might be violated.
