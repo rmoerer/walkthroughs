@@ -1,0 +1,61 @@
+---
+title: "Exponentially weighted moving average using Rcpp"
+author: "Ryan Moerer\n"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+Iterative operations like for loops have quite a bit of overhead in a language like R. Thus, it is good practice to resort to a vectorised way of doing things whenever possible. However, sometimes loop operations cannot be easily vectorized. Therefore, it might be better to implement your operation in a language like C++ where loops have a lot less overhead. You can easily do this using the R packaage `Rcpp`.
+
+## Exponentially-Weighted Moving Average in R
+
+Here's an R implementation of an exponentially-weighted moving average using a loop.
+
+```{r}
+ewmaR <- function(x, alpha) {
+  ewma <- numeric(length(x))
+  ewma[1] <- x[1]
+  for (i in 2:length(x)) {
+    ewma[i] <- alpha * x[i] + (1 - alpha) * ewma[i - 1]
+  }
+  ewma
+}
+
+ewmaR(1:20, 0.9)
+```
+
+## Exponentially-Weighted Moving Average using Rcpp
+
+And here's a C++ implementation of that same operation using `Rcpp`.
+
+```{r}
+library(Rcpp)
+
+cppFunction('NumericVector ewmaCPP(NumericVector x, double alpha) {
+  NumericVector ewma(x.size());
+  ewma[0] = x[0];
+  for (int i = 1; i < x.size(); ++i) {
+    ewma[i] = alpha * x[i] + (1 - alpha) * ewma[i - 1];
+  }
+  return ewma;
+}')
+
+ewmaCPP(1:20, 0.9)
+```
+
+## Comparing performance
+
+As one can see, the EWMA implemented in C++ is magnitudes faster than the EWMA implemented in R.
+
+```{r}
+x <- runif(1e3)
+
+bench::mark(
+  ewmaR(x, 0.9),
+  ewmaCPP(x, 0.9)
+)
+```
