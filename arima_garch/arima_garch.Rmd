@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
 
 ## ARIMA
 
-An ARIMA model of order ($p, d, q$) can be formulated as 
+An ARIMA model of order ($p$, $d$, $q$) can be formulated as 
 
 $$
 x_t^\prime = \phi_1x^\prime_{t-1} + \cdots+\phi_px^\prime_{t-p}+\theta_1w_{t-1}+\cdots+\theta_qw_{t-q}+w_t
@@ -25,9 +25,9 @@ $$
 
 ## ARIMA-GARCH
 
-In many areas, most notably finance, the constant variance that we assume with a stationary time series is violated. Thus, approaches are needed to model the conditional heteroskedasticity of these types of time series. One popular approach to this problem is the GARCH model. GARCH($p, q$) can easily be combined with ARIMA($p, d, q$) in the following way
+In many areas, most notably finance, the constant variance that we assume with a stationary time series is violated. Thus, approaches are needed to model the conditional heteroskedasticity of these types of time series. One popular approach to this problem is the GARCH model. GARCH($p$, $q$) can easily be combined with ARIMA($p$, $d$, $q$) in the following way
 
-${x_t}$ is an ARIMA($p, d, q$) process, except $w_t$ is not assumed to constant Gaussian white noise but rather
+${x_t}$ is an ARIMA($p$, $d$, $q$) process, except $w_t$ is not assumed to constant Gaussian white noise but rather
 
 $w_t = \sigma_t\epsilon_t$
 
@@ -75,7 +75,7 @@ acf(sp500_returns^2)
 
 ### Model Selection
 
-We will select a model in a stepwise fashion in which we iterate through a set of possible ($p,q$) orders for the ARMA aspect of the model and fit each ARMA part with a GARCH(1, 1) part. We will also used a skewed generalized error distribution for the errors because normally distributed conditional errors is often a poor assumption for financial time series. The best model will be selected by Bayesian Information Criterion.
+We will select a model in a stepwise fashion in which we iterate through a set of possible ($p$, $q$) orders for the ARMA aspect of the model and fit each ARMA part with a GARCH(1, 1) part. We will also used a skewed generalized error distribution for the errors because normally distributed conditional errors is often a poor assumption for financial time series. The best model will be selected by Bayesian Information Criterion.
 
 ```{r}
 final_bic <- Inf; final_model <- NULL; final_order <- NULL
