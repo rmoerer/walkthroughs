@@ -6,7 +6,7 @@ Ryan Moerer
 
 ## ARIMA
 
-An ARIMA model of order ($p$, $d$, $q$) can be formulated as
+An ARIMA model of order (p, d, q) can be formulated as
 
 $$
 x_t^\prime = \phi_1x^\prime_{t-1} + \cdots+\phi_px^\prime_{t-p}+\theta_1w_{t-1}+\cdots+\theta_qw_{t-q}+w_t
@@ -26,10 +26,10 @@ In many areas, most notably finance, the constant variance that we
 assume with a stationary time series is violated. Thus, approaches are
 needed to model the conditional heteroskedasticity of these types of
 time series. One popular approach to this problem is the GARCH model.
-GARCH($p$, $q$) can easily be combined with ARIMA($p$, $d$, $q$) in the
+GARCH(p, q) can easily be combined with ARIMA(p, d, q) in the
 following way
 
-${x_t}$ is an ARIMA($p$, $d$, $q$) process, except $w_t$ is not assumed
+${x_t}$ is an ARIMA(p, d, q) process, except $w_t$ is not assumed
 to constant Gaussian white noise but rather
 
 $w_t = \sigma_t\epsilon_t$
